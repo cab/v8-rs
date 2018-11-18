@@ -225,7 +225,7 @@ pub struct FunctionCallbackInfo {
     pub is_construct_call: bool,
 }
 
-pub type FunctionCallback = Fn(FunctionCallbackInfo) -> Result<Value, Value> + 'static;
+pub type FunctionCallback = FnMut(FunctionCallbackInfo) -> Result<Value, Value> + 'static;
 
 pub fn undefined(isolate: &isolate::Isolate) -> Primitive {
     let raw = unsafe { util::invoke(isolate, |c| v8::v8_Undefined(c)).unwrap() };
