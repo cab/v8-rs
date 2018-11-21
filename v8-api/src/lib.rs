@@ -204,6 +204,8 @@ const SPECIAL_METHODS: &'static [(&'static str, &'static str)] = &[
     ("V8", "Dispose"), // V8::Dispose takes no context
     ("V8", "InitializePlatform"), // V8::InitializePlatform takes no context
     ("V8", "ShutdownPlatform"), // V8::ShutdownPlatform takes no context
+    ("String", "GetExternalStringResource"),
+    ("String", "GetExternalOneByteStringResource")
 ];
 
 /// Default mangle rules.
@@ -243,17 +245,20 @@ const METHOD_MANGLES: &'static [MethodMangle] = &[
 /// Since this library is supposed to be used in a build script,
 /// panics if anything goes wrong whatsoever.
 pub fn read<P1, P2>(file_path: P1, extra_includes: &[P2]) -> Api
-    where P1: AsRef<path::Path>,
-          P2: AsRef<path::Path>
+where
+    P1: AsRef<path::Path>,
+    P2: AsRef<path::Path>,
 {
     let clang = clang::Clang::new().unwrap();
     let index = clang::Index::new(&clang, false, true);
 
-    let mut args = vec!["-x".to_owned(),
-                        "c++".to_owned(),
-                        "--std=c++11".to_owned(),
-                        "-DV8_DEPRECATION_WARNINGS".to_owned(),
-                        "-DV8_IMMINENT_DEPRECATION_WARNINGS".to_owned()];
+    let mut args = vec![
+        "-x".to_owned(),
+        "c++".to_owned(),
+        "--std=c++11".to_owned(),
+        "-DV8_DEPRECATION_WARNINGS".to_owned(),
+        "-DV8_IMMINENT_DEPRECATION_WARNINGS".to_owned(),
+    ];
 
     if cfg!(all(windows, target_env = "msvc")) {
         args.push("-fms-compatibility-version=19".to_owned());
@@ -271,7 +276,8 @@ pub fn read<P1, P2>(file_path: P1, extra_includes: &[P2]) -> Api
         }
     }
 
-    let translation_unit = index.parser(file_path.as_ref())
+    let translation_unit = index
+        .parser(file_path.as_ref())
         .arguments(&args)
         .parse()
         .unwrap();
@@ -280,15 +286,20 @@ pub fn read<P1, P2>(file_path: P1, extra_includes: &[P2]) -> Api
 }
 
 fn build_api(entity: &clang::Entity) -> Api {
-    let namespaces = entity.get_children()
+    let namespaces = entity
+        .get_children()
         .into_iter()
         .filter(|e| e.get_name().map(|n| n == "v8").unwrap_or(false));
-    let classes = namespaces.flat_map(|n| build_classes(&n).into_iter()).collect();
+    let classes = namespaces
+        .flat_map(|n| build_classes(&n).into_iter())
+        .collect();
+    // panic!("wtf");
     Api { classes: classes }
 }
 
 fn build_classes(entity: &clang::Entity) -> Vec<Class> {
-    let entities: Vec<clang::Entity> = entity.get_children()
+    let entities: Vec<clang::Entity> = entity
+        .get_children()
         .into_iter()
         // Is a class
         .filter(|e| e.get_kind() == clang::EntityKind::ClassDecl)
@@ -296,15 +307,18 @@ fn build_classes(entity: &clang::Entity) -> Vec<Class> {
         .filter(|e| !e.get_children().is_empty())
         // Is not nameless or special
         .filter(|e| {
-            e.get_name().map(|ref n| !SPECIAL_CLASSES.contains(&n.as_str())).unwrap_or(false)
+            e.get_name()
+                .map(|ref n| !SPECIAL_CLASSES.contains(&n.as_str()))
+                .unwrap_or(false)
         })
         .collect();
-    let mut classes = entities.iter()
-        .map(|e| build_class(&e))
-        .collect::<Vec<_>>();
+    let mut classes = entities.iter().map(|e| build_class(&e)).collect::<Vec<_>>();
     let name = entity.get_name().unwrap();
-    let mut children: Vec<Class> = if (name == "v8" || name  == "Promise")  {
-        entities.into_iter().flat_map(|e| build_classes(&e)).collect()
+    let mut children: Vec<Class> = if (name == "v8" || name == "Promise") {
+        entities
+            .into_iter()
+            .flat_map(|e| build_classes(&e))
+            .collect()
     } else {
         vec![]
     };
@@ -312,14 +326,14 @@ fn build_classes(entity: &clang::Entity) -> Vec<Class> {
     children
 }
 
-fn build_name(mut base: String, sep: &str,entity: &clang::Entity) -> String {
-        match entity.get_semantic_parent() {
-            Some(n) if n.get_kind() != clang::EntityKind::TranslationUnit => {
-                let next = format!("{}{}{}", n.get_name().unwrap(), sep, base);
-                build_name(next, sep, &n)
-            },
-            other => base
+fn build_name(mut base: String, sep: &str, entity: &clang::Entity) -> String {
+    match entity.get_semantic_parent() {
+        Some(n) if n.get_kind() != clang::EntityKind::TranslationUnit => {
+            let next = format!("{}{}{}", n.get_name().unwrap(), sep, base);
+            build_name(next, sep, &n)
         }
+        other => base,
+    }
 }
 
 fn build_class(entity: &clang::Entity) -> Class {
@@ -332,7 +346,8 @@ fn build_class(entity: &clang::Entity) -> Class {
         build_name(base, "_", entity).replace("v8_", "")
     };
     Class {
-        methods: entity.get_children()
+        methods: entity
+            .get_children()
             .into_iter()
             // Is a method
             .filter(|e| e.get_kind() == clang::EntityKind::Method)
@@ -344,39 +359,65 @@ fn build_class(entity: &clang::Entity) -> Class {
             .filter(|e| {
                 e.get_name()
                     .map(|ref n| {
-                        !n.starts_with("operator") &&
-                            !SPECIAL_METHODS.iter()
-                            .any(|m| m.0 == name &&  m.1 == n)
+                        !n.starts_with("operator")
+                            && !SPECIAL_METHODS.iter().any(|m| m.0 == name && m.1 == n)
                     })
                     .unwrap_or(false)
             })
-            .flat_map(|e| build_method(&e)
-                      .map_err(|err| {
-                          warn!("Could not translate method {}", e.get_display_name().unwrap_or_else(||"(unnamed)".to_owned()));
-                          err
-                      }))
+            .flat_map(|e| {
+                build_method(&e).map_err(|err| {
+                    println!(
+                        "Could not translate method {}.{}: {:?}",
+                        name,
+                        e.get_display_name()
+                            .unwrap_or_else(|| "(unnamed)".to_owned()),
+                        err
+                    );
+                    err
+                })
+            })
             .collect(),
         name: name,
-        qualified_name
+        qualified_name,
     }
 }
 
 fn build_method(entity: &clang::Entity) -> Result<Method, ()> {
-    let display_name = try!(entity.get_display_name().ok_or(()));
-    let name = try!(entity.get_name().ok_or(()));
-    let args = try!(entity.get_arguments().ok_or(()));
+    let display_name = entity.get_display_name().ok_or_else(|| {
+        println!("todo");
+        ()
+    })?;
+    let name = entity.get_name().ok_or_else(|| {
+        println!("todo");
+        ()
+    })?;
+    let args = entity.get_arguments().ok_or_else(|| {
+        println!("todo");
+        ()
+    })?;
     let args: Vec<Arg> = try!(args.iter().map(|e| build_arg(&e)).collect());
-
-    let method_type = try!(entity.get_type().ok_or(()));
+    let method_type = entity.get_type().ok_or_else(|| {
+        println!("todo");
+        ()
+    })?;
     let method_type_display_name = method_type.get_display_name();
-    let ret_type = try!(method_type.get_result_type().ok_or(()));
-    let ret_type = try!(build_ret_type(&ret_type));
+    let ret_type = method_type.get_result_type().ok_or_else(|| {
+        println!("todo");
+        ()
+    })?;
 
-    let mangled_name = METHOD_MANGLES.iter()
+    println!("here for {:?}", entity.get_name());
+    let ret_type = build_ret_type(&ret_type)?;
+
+    println!("ret is {:?}", ret_type);
+
+    let mangled_name = METHOD_MANGLES
+        .iter()
         .find(|m| {
-            m.name == name &&
-            (args.iter().any(|a| a.name == m.signature) || display_name.contains(m.signature) ||
-             method_type_display_name.contains(m.signature))
+            m.name == name
+                && (args.iter().any(|a| a.name == m.signature)
+                    || display_name.contains(m.signature)
+                    || method_type_display_name.contains(m.signature))
         })
         .map(|m| m.mangle.to_owned());
 
@@ -424,14 +465,14 @@ fn build_type(typ: &clang::Type) -> Result<Type, ()> {
             } else {
                 Ok(Type::Char)
             }
-        },
+        }
         clang::TypeKind::CharU => {
             if typ.is_const_qualified() {
                 Ok(Type::ConstUChar)
             } else {
                 Ok(Type::UChar)
             }
-        },
+        }
         clang::TypeKind::UInt => Ok(Type::UInt),
         clang::TypeKind::Int => Ok(Type::Int),
         clang::TypeKind::ULong => Ok(Type::ULong),
@@ -453,8 +494,12 @@ fn build_type(typ: &clang::Type) -> Result<Type, ()> {
             // TODO: is this right?
             let name = typ.get_display_name().replace("v8::", "");
             if name.contains("::") {
-                warn!("No support for nested type {:?}", name);
-                Err(())
+                println!("No support for record nested type {:?}", name);
+                if name.starts_with("Promise") {
+                    Ok(Type::Class(name))
+                } else {
+                    Err(())
+                }
             } else {
                 Ok(Type::Class(name))
             }
@@ -463,7 +508,7 @@ fn build_type(typ: &clang::Type) -> Result<Type, ()> {
             // TODO: is this right?
             let name = typ.get_display_name().replace("v8::", "");
             if name.contains("::") {
-                warn!("No support for nested type {:?}", name);
+                println!("No support for enum nested type {:?}", name);
                 Err(())
             } else {
                 Ok(Type::Enum(name))
@@ -484,7 +529,7 @@ fn build_type(typ: &clang::Type) -> Result<Type, ()> {
                 "size_t" | "const size_t" => Ok(Type::USize),
                 s if s.ends_with("Callback") => Ok(Type::Callback(s.to_owned())),
                 s => {
-                    warn!("Unmapped type {:?} (a typedef)", s);
+                    println!("Unmapped type {:?} (a typedef)", s);
                     Err(())
                 }
             }
@@ -502,38 +547,42 @@ fn build_type(typ: &clang::Type) -> Result<Type, ()> {
                     "v8::Local<v8::String>" => {
                         Ok(Type::Ref(Box::new(Type::Class("String".to_owned()))))
                     }
-                    "v8::Local<v8::FunctionTemplate>" => {
-                        Ok(Type::Ref(Box::new(Type::Class("FunctionTemplate".to_owned()))))
-                    }
+                    "v8::Local<v8::FunctionTemplate>" => Ok(Type::Ref(Box::new(Type::Class(
+                        "FunctionTemplate".to_owned(),
+                    )))),
                     n => {
-                        warn!("Unmapped type {:?} of kind {:?} (in unexposed exception table)",
-                              n,
-                              typ.get_kind());
+                        println!(
+                            "Unmapped type {:?} of kind {:?} (in unexposed exception table)",
+                            n,
+                            typ.get_kind()
+                        );
                         Err(())
                     }
                 }
             }
         }
-        clang::TypeKind::LValueReference => {
-            match typ.get_display_name().as_str() {
-                "const v8::NamedPropertyHandlerConfiguration &" => {
-                    Ok(Type::CallbackLValue("NamedPropertyHandlerConfiguration".to_owned()))
-                }
-                "const v8::IndexedPropertyHandlerConfiguration &" => {
-                    Ok(Type::CallbackLValue("IndexedPropertyHandlerConfiguration".to_owned()))
-                }
-                n => {
-                    warn!("Unmapped type {:?} of kind {:?} (in lvalue reference exception table)",
-                          n,
-                          typ.get_kind());
-                    Err(())
-                }
+        clang::TypeKind::LValueReference => match typ.get_display_name().as_str() {
+            "const v8::NamedPropertyHandlerConfiguration &" => Ok(Type::CallbackLValue(
+                "NamedPropertyHandlerConfiguration".to_owned(),
+            )),
+            "const v8::IndexedPropertyHandlerConfiguration &" => Ok(Type::CallbackLValue(
+                "IndexedPropertyHandlerConfiguration".to_owned(),
+            )),
+            n => {
+                println!(
+                    "Unmapped type {:?} of kind {:?} (in lvalue reference exception table)",
+                    n,
+                    typ.get_kind()
+                );
+                Err(())
             }
-        }
+        },
         _ => {
-            warn!("Unmapped type {:?} of kind {:?} (in kind dispatch table)",
-                  typ.get_display_name(),
-                  typ.get_kind());
+            println!(
+                "Unmapped type {:?} of kind {:?} (in kind dispatch table)",
+                typ.get_display_name(),
+                typ.get_kind()
+            );
             Err(())
         }
     }

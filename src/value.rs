@@ -1608,6 +1608,23 @@ impl Set {
     }
 }
 
+impl PromiseResolver {
+    pub fn new(isolate: &isolate::Isolate, context: &context::Context) -> PromiseResolver {
+        unsafe {
+            let raw = util::invoke_ctx(&isolate, context, |c| {
+                    v8::v8_Promise_Resolver_New(c,
+                                     context.as_raw(),
+                                     Some(util::callback),
+                                     (&closure as &Value).as_raw(),
+                                     length as os::raw::c_int,
+                                     v8::ConstructorBehavior::ConstructorBehavior_kAllow)
+                })
+                .unwrap();
+            PromiseResolver(isolate.clone(), raw)
+        }
+    }
+}
+
 impl Function {
     /// Create a function in the current execution context for a given callback.
     pub fn new(isolate: &isolate::Isolate,
