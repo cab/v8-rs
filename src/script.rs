@@ -11,6 +11,11 @@ use util;
 #[derive(Debug)]
 pub struct Script(isolate::Isolate, v8::ScriptRef);
 
+#[derive(Debug)]
+pub struct UnboundScript(isolate::Isolate, v8::UnboundScriptRef);
+
+unsafe impl Send for UnboundScript{}
+
 impl Script {
     /// Compiles the specified source code into a compiled script.
     pub fn compile(isolate: &isolate::Isolate,
@@ -66,6 +71,15 @@ impl Script {
             Ok(value::Value::from_raw(&self.0, raw))
         }
     }
+
+    pub fn unbound(&self) -> error::Result<UnboundScript> {
+        unsafe {
+            let raw = try!(util::invoke(&self.0,
+                                            |c| v8::v8_Script_GetUnboundScript(c, self.1)));
+            Ok(UnboundScript(self.0.clone(), raw))
+        }
+    }
 }
 
 reference!(Script, v8::v8_Script_CloneRef, v8::v8_Script_DestroyRef);
+reference!(UnboundScript, v8::v8_UnboundScript_CloneRef, v8::v8_UnboundScript_DestroyRef);

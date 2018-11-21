@@ -27,7 +27,7 @@ impl<'a, A> fmt::Display for C<'a, A>
     }
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let out_dir_str = env::var_os("OUT_DIR").unwrap();
     let out_dir_path = path::Path::new(&out_dir_str);
 
@@ -38,6 +38,8 @@ fn main() {
     let api = read_api();
 
     link_v8();
+
+    write_decl_header(&api, io::stdout());
 
     let decl_header_path = out_dir_path.join("v8-glue-decl-generated.h");
     write_decl_header(&api, &mut fs::File::create(&decl_header_path).unwrap()).unwrap();
@@ -52,6 +54,7 @@ fn main() {
 
     let ffi_path = out_dir_path.join("ffi.rs");
     gen_bindings(out_dir_path, &ffi_path);
+    Ok(())
 }
 
 fn read_api() -> v8_api::Api {
@@ -240,10 +243,10 @@ fn write_decl_header<W>(api: &v8_api::Api, mut out: W) -> io::Result<()>
     for class in api.classes.iter() {
         try!(writeln!(out, ""));
         try!(writeln!(out, "#if defined __cplusplus"));
-        try!(writeln!(out, "typedef v8::{class} *{class}Ptr;", class = class.name));
+        try!(writeln!(out, "typedef {qclass} *{class}Ptr;", class = class.name, qclass = class.qualified_name));
         try!(writeln!(out,
-                      "typedef v8::Persistent<v8::{class}> *{class}Ref;",
-                      class = class.name));
+                      "typedef v8::Persistent<{qclass}> *{class}Ref;",
+                      class = class.name, qclass = class.qualified_name));
         try!(writeln!(out, "#else"));
         try!(writeln!(out,
                       "typedef struct _{class} *{class}Ptr;",

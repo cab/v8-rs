@@ -18,6 +18,7 @@ pub struct Api {
 pub struct Class {
     /// The simple name of the class (without the `v8::` prefix).
     pub name: String,
+    pub qualified_name: String,
     /// The methods of this class, in declaration order.
     pub methods: Vec<Method>,
 }
@@ -164,6 +165,8 @@ const SPECIAL_CLASSES: &'static [&'static str] = &[
     "Platform",
     "Task",
     "IdleTask",
+    "ExternalSourceStream",
+    "ExternalStringResource"
 ];
 
 /// Methods that we should not return because they are special.
@@ -285,7 +288,7 @@ fn build_api(entity: &clang::Entity) -> Api {
 }
 
 fn build_classes(entity: &clang::Entity) -> Vec<Class> {
-    entity.get_children()
+    let entities: Vec<clang::Entity> = entity.get_children()
         .into_iter()
         // Is a class
         .filter(|e| e.get_kind() == clang::EntityKind::ClassDecl)
@@ -295,12 +298,39 @@ fn build_classes(entity: &clang::Entity) -> Vec<Class> {
         .filter(|e| {
             e.get_name().map(|ref n| !SPECIAL_CLASSES.contains(&n.as_str())).unwrap_or(false)
         })
+        .collect();
+    let mut classes = entities.iter()
         .map(|e| build_class(&e))
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+    let name = entity.get_name().unwrap();
+    let mut children: Vec<Class> = if (name == "v8" || name  == "Promise")  {
+        entities.into_iter().flat_map(|e| build_classes(&e)).collect()
+    } else {
+        vec![]
+    };
+    children.append(&mut classes);
+    children
+}
+
+fn build_name(mut base: String, sep: &str,entity: &clang::Entity) -> String {
+        match entity.get_semantic_parent() {
+            Some(n) if n.get_kind() != clang::EntityKind::TranslationUnit => {
+                let next = format!("{}{}{}", n.get_name().unwrap(), sep, base);
+                build_name(next, sep, &n)
+            },
+            other => base
+        }
 }
 
 fn build_class(entity: &clang::Entity) -> Class {
-    let name = entity.get_name().unwrap();
+    let qualified_name = {
+        let mut base = String::from(entity.get_name().unwrap());
+        build_name(base, "::", entity)
+    };
+    let name = {
+        let mut base = String::from(entity.get_name().unwrap());
+        build_name(base, "_", entity).replace("v8_", "")
+    };
     Class {
         methods: entity.get_children()
             .into_iter()
@@ -327,6 +357,7 @@ fn build_class(entity: &clang::Entity) -> Class {
                       }))
             .collect(),
         name: name,
+        qualified_name
     }
 }
 

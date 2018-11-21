@@ -47,6 +47,8 @@ static INITIALIZE: sync::Once = sync::ONCE_INIT;
 #[derive(Debug)]
 pub struct Isolate(v8::IsolatePtr);
 
+unsafe impl Send for Isolate {}
+
 /// A builder for isolates.  Can be converted into an isolate with the `build` method.
 pub struct Builder {
     supports_idle_tasks: bool,

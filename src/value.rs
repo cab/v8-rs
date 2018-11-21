@@ -18,6 +18,8 @@ pub struct Data(isolate::Isolate, v8::DataRef);
 #[derive(Debug)]
 pub struct Value(isolate::Isolate, v8::ValueRef);
 
+unsafe impl Send for Value {}
+
 /// The superclass of primitive values.  See ECMA-262 4.3.2.
 #[derive(Debug)]
 pub struct Primitive(isolate::Isolate, v8::PrimitiveRef);
@@ -87,6 +89,10 @@ pub struct Function(isolate::Isolate, v8::FunctionRef);
 /// This API is experimental. Only works with --harmony flag.
 #[derive(Debug)]
 pub struct Promise(isolate::Isolate, v8::PromiseRef);
+
+/// This API is experimental. Only works with --harmony flag.
+#[derive(Debug)]
+pub struct PromiseResolver(isolate::Isolate, v8::Promise_ResolverRef);
 
 /// An instance of the built-in Proxy constructor (ECMA-262, 6th Edition, 26.2.1).
 #[derive(Debug)]

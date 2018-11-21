@@ -13,6 +13,7 @@ version = "0.9.6"
 error-chain = "0.9.0"
 lazy_static = "0.2.1"
 num_cpus = "1.1.0"
+log = "0.4"
 
 [dependencies.v8-sys]
 path = "v8-sys"

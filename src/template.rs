@@ -133,6 +133,28 @@ impl ObjectTemplate {
         };
     }
 
+    pub fn set_accessor_property(&self, name: &str, getter: &FunctionTemplate, setter: &FunctionTemplate) {
+        let js_name: value::Name = value::String::from_str(&self.0, name).into();
+        let template: &Template = self;
+        unsafe {
+            trace!("setting prop {:?}", js_name);
+            util::invoke(&self.0, |c| {
+                trace!("using {:?}", template.1);
+                trace!("using {:?}", js_name);
+                trace!("using {:?}", getter.1);
+                trace!("using {:?}", setter.1); 
+                    v8::v8_Template_SetAccessorProperty(c,
+                                            template.1,
+                                            js_name.as_raw(),
+                                            getter.1,
+                                            setter.1,
+                                            v8::PropertyAttribute::PropertyAttribute_None,
+                                            v8::AccessControl::AccessControl_DEFAULT)
+                })
+                .unwrap()
+        }; 
+    }
+
     /// Creates a new object instance based off of this template.
     pub fn new_instance(&self, context: &context::Context) -> value::Object {
         unsafe {
