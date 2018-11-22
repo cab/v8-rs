@@ -352,6 +352,8 @@ ValueRef v8_Isolate_ThrowException(IsolatePtr self, ValueRef exception);
 uint32_t v8_Isolate_GetNumberOfDataSlots(IsolatePtr self);
 void v8_Isolate_SetData(IsolatePtr self, uint32_t slot, void *data);
 void *v8_Isolate_GetData(IsolatePtr self, uint32_t slot);
+void v8_Isolate_SetAutorunMicrotasks(IsolatePtr self, bool autorun);
+void v8_Isolate_RunMicrotasks(IsolatePtr self);
 void v8_Isolate_SetCaptureStackTraceForUncaughtExceptions_Overview(IsolatePtr self, bool capture, int frame_limit);
 void v8_Isolate_SetCaptureStackTraceForUncaughtExceptions_Detailed(IsolatePtr self, bool capture, int frame_limit);
 void v8_Isolate_Dispose(IsolatePtr isolate);

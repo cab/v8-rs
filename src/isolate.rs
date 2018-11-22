@@ -25,6 +25,9 @@
 //! `Isolate::builder().supports_idle_tasks(true).build()`.  The user should then regularly call
 //! `isolate.run_idle_tasks(deadline)` to run any pending idle tasks.
 
+use allocator;
+use context;
+use platform;
 use std::cmp;
 use std::collections;
 use std::mem;
@@ -32,9 +35,6 @@ use std::os;
 use std::sync;
 use std::time;
 use v8_sys as v8;
-use allocator;
-use context;
-use platform;
 
 static INITIALIZE: sync::Once = sync::ONCE_INIT;
 
@@ -75,7 +75,9 @@ impl Isolate {
 
     /// Creates a new isolate builder.
     pub fn builder() -> Builder {
-        Builder { supports_idle_tasks: false }
+        Builder {
+            supports_idle_tasks: false,
+        }
     }
 
     /// Creates a data from a set of raw pointers.
@@ -86,6 +88,16 @@ impl Isolate {
         let result = Isolate(raw);
         result.get_data().count += 1;
         result
+    }
+
+    pub fn set_autorun_microtasks(&self, autorun: bool) {
+        unsafe {
+            let raw = v8::v8_Isolate_SetAutorunMicrotasks(self.as_raw(), autorun);
+        }
+    }
+
+    pub fn run_microtasks(&self) {
+        unsafe { v8::v8_Isolate_RunMicrotasks(self.as_raw()) };
     }
 
     /// Returns the underlying raw pointer behind this isolate.
@@ -146,10 +158,12 @@ impl Isolate {
     pub fn run_idle_task(&self, deadline: time::Duration) -> bool {
         let data = unsafe { self.get_data() };
 
-        if let Some(idle_task) = data.idle_task_queue
+        if let Some(idle_task) = data
+            .idle_task_queue
             .as_mut()
             .map(|q| q.pop_front())
-            .unwrap_or(None) {
+            .unwrap_or(None)
+        {
             idle_task.run(deadline);
             true
         } else {
@@ -171,7 +185,11 @@ impl Isolate {
 
     /// Enqueues a task to be run when the isolate is considered to be "idle."
     pub fn enqueue_idle_task(&self, idle_task: platform::IdleTask) {
-        unsafe { self.get_data() }.idle_task_queue.as_mut().unwrap().push_back(idle_task);
+        unsafe { self.get_data() }
+            .idle_task_queue
+            .as_mut()
+            .unwrap()
+            .push_back(idle_task);
     }
 
     /// Whether this isolate was configured to support idle tasks.

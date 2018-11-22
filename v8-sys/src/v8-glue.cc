@@ -824,6 +824,14 @@ ValueRef v8_Isolate_ThrowException(IsolatePtr self, ValueRef exception) {
   return unwrap(self, self->ThrowException(wrap(self, exception)));
 }
 
+void v8_Isolate_SetAutorunMicrotasks(IsolatePtr self, bool autorun) {
+    self->SetAutorunMicrotasks(autorun);
+}
+
+void v8_Isolate_RunMicrotasks(IsolatePtr self) {
+    self->RunMicrotasks();
+}
+
 void v8_Isolate_SetCaptureStackTraceForUncaughtExceptions_Overview(IsolatePtr self, bool capture, int frame_limit) {
     self->SetCaptureStackTraceForUncaughtExceptions(capture, frame_limit, v8::StackTrace::kOverview);
 }
