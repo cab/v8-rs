@@ -201,6 +201,7 @@ impl Isolate {
         v8::v8_Isolate_GetData(self.0, DATA_PTR_SLOT) as *mut Data
     }
 
+    #[allow(mut_from_ref)]
     unsafe fn get_data(&self) -> &mut Data {
         self.get_data_ptr().as_mut().unwrap()
     }
